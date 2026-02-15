@@ -2,16 +2,16 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
-const { createCanvas } = require("canvas");
+const { pdfToPng } = require("pdf-to-png-converter");
+const Tesseract = require("tesseract.js");
 
-const { analyzeImages } = require("../services/analysisService");
+const { analyzeTranscriptText } = require("../services/analysisService");
 
 const router = express.Router();
 
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 30 * 1024 * 1024 }
+  limits: { fileSize: 20 * 1024 * 1024 }
 });
 
 router.post("/upload", upload.single("document"), async (req, res) => {
@@ -23,28 +23,31 @@ router.post("/upload", upload.single("document"), async (req, res) => {
     const filePath = path.resolve(req.file.path);
     const fileBuffer = fs.readFileSync(filePath);
 
-    const pdf = await pdfjsLib.getDocument({ data: fileBuffer }).promise;
+    // Convert first 6 pages to PNG buffers
+    const pngPages = await pdfToPng(fileBuffer, {
+      pagesToProcess: [1,2,3,4,5,6],
+      viewportScale: 2
+    });
 
-    const maxPages = Math.min(pdf.numPages, 6);
-    const base64Images = [];
+    let extractedText = "";
 
-    for (let i = 1; i <= maxPages; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1.5 });
+    for (const page of pngPages) {
+      const imageBuffer = page.content; // PNG buffer
 
-      const canvas = createCanvas(viewport.width, viewport.height);
-      const context = canvas.getContext("2d");
+      const {
+        data: { text }
+      } = await Tesseract.recognize(imageBuffer, "eng");
 
-      await page.render({
-        canvasContext: context,
-        viewport: viewport
-      }).promise;
-
-      const imageBuffer = canvas.toBuffer("image/png");
-      base64Images.push(imageBuffer.toString("base64"));
+      extractedText += text + "\n";
     }
 
-    const result = await analyzeImages(base64Images);
+    if (!extractedText || extractedText.length < 200) {
+      return res.status(400).json({
+        error: "OCR extraction failed."
+      });
+    }
+
+    const result = await analyzeTranscriptText(extractedText);
 
     fs.unlinkSync(filePath);
 

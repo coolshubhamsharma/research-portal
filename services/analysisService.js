@@ -8,24 +8,29 @@ const client = new OpenAI({
   }
 });
 
-async function analyzeImages(base64ImagesArray) {
+async function analyzeTranscriptText(text) {
   try {
-    const contentArray = [
-      {
-        type: "text",
-        text: `
+    const trimmedText = text.substring(0, 15000);
+
+    const response = await client.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "user",
+          content: `
 You are a financial research extraction engine.
 
-Analyze the earnings call transcript shown in these images.
+Analyze this earnings call transcript and return ONLY valid JSON.
 
-STRICT RULES:
-- Use only information visible in the document.
+Rules:
+- Use only information present.
 - Do NOT hallucinate.
-- If something is not mentioned, write "Not mentioned".
-- Support key conclusions with short direct quotes.
-- Return ONLY valid JSON. No explanation.
+- If not mentioned → "Not mentioned".
+- Include supporting quotes.
+- Return ONLY valid JSON.
 
-Return this JSON structure:
+Return:
 
 {
   "management_tone": "",
@@ -42,31 +47,19 @@ Return this JSON structure:
   "supporting_quotes": [],
   "analysis_confidence_percent": 0
 }
+
+Transcript:
+${trimmedText}
 `
-      }
-    ];
-
-    base64ImagesArray.forEach(base64 => {
-      contentArray.push({
-        type: "image_url",
-        image_url: {
-          url: `data:image/png;base64,${base64}`
-        }
-      });
-    });
-
-    const response = await client.chat.completions.create({
-      model: "openai/gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "user",
-          content: contentArray
         }
       ]
     });
 
-    const rawOutput = response.choices[0].message.content;
+    const rawOutput = response.choices?.[0]?.message?.content;
+
+    if (!rawOutput) {
+      throw new Error("Invalid LLM response structure");
+    }
 
     const cleanedOutput = rawOutput
       .replace(/```json/g, "")
@@ -81,5 +74,4 @@ Return this JSON structure:
   }
 }
 
-
-module.exports = { analyzeImages };
+module.exports = { analyzeTranscriptText };

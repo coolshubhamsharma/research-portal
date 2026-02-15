@@ -13,13 +13,13 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "canvas": "^3.2.1",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
     "multer": "^2.0.2",
     "openai": "^6.22.0",
     "pdf-parse": "^1.1.1",
-    "pdfjs-dist": "^5.4.624"
+    "pdf-to-png-converter": "^3.11.0",
+    "tesseract.js": "^7.0.0"
   }
 }

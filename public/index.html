@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Management Intelligence Extractor</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 40px;
+      max-width: 900px;
+    }
+
+    button {
+      padding: 8px 16px;
+      cursor: pointer;
+    }
+
+    .section {
+      margin-top: 25px;
+      padding: 15px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+
+    .error {
+      color: red;
+    }
+
+    .loading {
+      font-style: italic;
+    }
+
+    ul {
+      margin-top: 5px;
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Management Intelligence Extractor</h2>
+  <p><strong>Purpose:</strong> Converts management transcripts into structured, analyst-ready intelligence.</p>
+  <p>Upload earnings call transcript (PDF)</p>
+
+  <form id="uploadForm">
+    <input type="file" name="document" accept=".pdf" required />
+    <button type="submit">Run Analysis</button>
+  </form>
+
+  <div id="status"></div>
+  <div id="output"></div>
+
+  <script>
+    const form = document.getElementById("uploadForm");
+    const statusDiv = document.getElementById("status");
+    const outputDiv = document.getElementById("output");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      outputDiv.innerHTML = "";
+      statusDiv.innerHTML = "<p class='loading'>Processing document... please wait.</p>";
+
+      const formData = new FormData(form);
+
+      try {
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          statusDiv.innerHTML = `<p class='error'>${data.error}</p>`;
+          return;
+        }
+
+        statusDiv.innerHTML = "<p>Analysis Complete</p>";
+        renderOutput(data);
+
+      } catch (err) {
+        statusDiv.innerHTML = "<p class='error'>Unexpected error occurred.</p>";
+      }
+    });
+
+    function renderOutput(data) {
+      outputDiv.innerHTML = `
+        <div class="section">
+          <h3>Management Tone</h3>
+          <p><strong>${data.management_tone}</strong></p>
+          <p>Confidence Level: ${data.confidence_level}</p>
+          <p>Model Confidence: ${data.analysis_confidence_percent}%</p>
+        </div>
+
+        <div class="section">
+          <h3>Key Positives</h3>
+          ${listItems(data.key_positives)}
+        </div>
+
+        <div class="section">
+          <h3>Key Concerns</h3>
+          ${listItems(data.key_concerns)}
+        </div>
+
+        <div class="section">
+          <h3>Forward Guidance</h3>
+          <p><strong>Revenue:</strong> ${data.forward_guidance.revenue_outlook}</p>
+          <p><strong>Margin:</strong> ${data.forward_guidance.margin_outlook}</p>
+          <p><strong>Capex:</strong> ${data.forward_guidance.capex_outlook}</p>
+        </div>
+
+        <div class="section">
+          <h3>Capacity Utilization</h3>
+          <p>${data.capacity_utilization_trend}</p>
+        </div>
+
+        <div class="section">
+          <h3>Growth Initiatives</h3>
+          ${listItems(data.growth_initiatives)}
+        </div>
+
+        <div class="section">
+          <h3>Supporting Quotes</h3>
+          ${listItems(data.supporting_quotes)}
+        </div>
+      `;
+    }
+
+    function listItems(items) {
+      if (!items || items.length === 0) return "<p>Not mentioned</p>";
+      return "<ul>" + items.map(i => `<li>${i}</li>`).join("") + "</ul>";
+    }
+  </script>
+
+  <div class="section">
+  <h3>System Limitations</h3>
+  <ul>
+    <li>Only first 6 pages analyzed (to manage token limits)</li>
+    <li>Large PDFs may increase latency</li>
+    <li>Scanned English transcripts supported</li>
+  </ul>
+</div>
+
+
+</body>
+</html>

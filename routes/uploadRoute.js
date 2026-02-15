@@ -46,7 +46,7 @@ router.post("/upload", upload.single("document"), async (req, res) => {
     console.log("Using Vision fallback...");
 
     const pngPages = await pdfToPng(fileBuffer, {
-      pagesToProcess: [1, 2, 3, 4, 5, 6],
+      pagesToProcess: [1, 2, 3],
       viewportScale: 2
     });
 

@@ -4,9 +4,8 @@ const fs = require("fs");
 const path = require("path");
 const pdfParse = require("pdf-parse");
 const { pdfToPng } = require("pdf-to-png-converter");
-const Tesseract = require("tesseract.js");
 
-const { analyzeTranscriptText } = require("../services/analysisService");
+const { analyzeImages } = require("../services/analysisService");
 
 const router = express.Router();
 
@@ -24,53 +23,38 @@ router.post("/upload", upload.single("document"), async (req, res) => {
     const filePath = path.resolve(req.file.path);
     const fileBuffer = fs.readFileSync(filePath);
 
-    let extractedText = "";
+    let base64Images = [];
 
     // -----------------------------
-    // 1 Try direct text extraction
+    // 1️⃣ Try direct text extraction (fast path)
     // -----------------------------
     try {
       const pdfData = await pdfParse(fileBuffer);
       if (pdfData.text && pdfData.text.length > 1000) {
-        extractedText = pdfData.text;
         console.log("Using direct text extraction.");
+        const result = await analyzeImages([], pdfData.text);
+        fs.unlinkSync(filePath);
+        return res.json(result);
       }
     } catch (err) {
-      console.log("Direct text extraction failed. Falling back to OCR.");
+      console.log("Direct text extraction failed.");
     }
 
     // -----------------------------
-    // 2 If insufficient text → OCR
+    // 2️⃣ Fallback → Convert first 3 pages to PNG
     // -----------------------------
-    if (!extractedText || extractedText.length < 1000) {
-      console.log("Running OCR fallback...");
+    console.log("Using Vision fallback...");
 
-      const pngPages = await pdfToPng(fileBuffer, {
-        pagesToProcess: [1, 2, 3],
-        viewportScale: 1.3
-      });
+    const pngPages = await pdfToPng(fileBuffer, {
+      pagesToProcess: [1, 2, 3, 4, 5, 6],
+      viewportScale: 2
+    });
 
-      for (const page of pngPages) {
-        const imageBuffer = page.content;
+    base64Images = pngPages.map(page =>
+      page.content.toString("base64")
+    );
 
-        const {
-          data: { text }
-        } = await Tesseract.recognize(imageBuffer, "eng");
-
-        extractedText += text + "\n";
-      }
-    }
-
-    if (!extractedText || extractedText.length < 200) {
-      return res.status(400).json({
-        error: "Unable to extract meaningful text from PDF."
-      });
-    }
-
-    // -----------------------------
-    // 3. Send to LLM
-    // -----------------------------
-    const result = await analyzeTranscriptText(extractedText);
+    const result = await analyzeImages(base64Images);
 
     fs.unlinkSync(filePath);
 

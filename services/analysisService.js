@@ -8,20 +8,17 @@ const client = new OpenAI({
   }
 });
 
-async function analyzeTranscriptText(text) {
+async function analyzeImages(base64Images = [], extractedText = null) {
   try {
-    const trimmedText = text.substring(0, 15000);
+    let contentArray = [];
 
-    const response = await client.chat.completions.create({
-      model: "openai/gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        {
-          role: "user",
-          content: `
+    // Instruction block
+    contentArray.push({
+      type: "text",
+      text: `
 You are a financial research extraction engine.
 
-Analyze this earnings call transcript and return ONLY valid JSON.
+Analyze the earnings call transcript and return ONLY valid JSON.
 
 Rules:
 - Use only information present.
@@ -47,10 +44,34 @@ Return:
   "supporting_quotes": [],
   "analysis_confidence_percent": 0
 }
-
-Transcript:
-${trimmedText}
 `
+    });
+
+    // If text extracted directly
+    if (extractedText) {
+      contentArray.push({
+        type: "text",
+        text: extractedText.substring(0, 15000)
+      });
+    }
+
+    // If images present (scanned fallback)
+    base64Images.forEach(base64 => {
+      contentArray.push({
+        type: "image_url",
+        image_url: {
+          url: `data:image/png;base64,${base64}`
+        }
+      });
+    });
+
+    const response = await client.chat.completions.create({
+      model: "openai/gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        {
+          role: "user",
+          content: contentArray
         }
       ]
     });
@@ -58,7 +79,7 @@ ${trimmedText}
     const rawOutput = response.choices?.[0]?.message?.content;
 
     if (!rawOutput) {
-      throw new Error("Invalid LLM response structure");
+      throw new Error("Invalid LLM response");
     }
 
     const cleanedOutput = rawOutput
@@ -74,4 +95,4 @@ ${trimmedText}
   }
 }
 
-module.exports = { analyzeTranscriptText };
+module.exports = { analyzeImages };

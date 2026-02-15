@@ -46,8 +46,8 @@ router.post("/upload", upload.single("document"), async (req, res) => {
       console.log("Running OCR fallback...");
 
       const pngPages = await pdfToPng(fileBuffer, {
-        pagesToProcess: [1, 2, 3, 4, 5, 6],
-        viewportScale: 2
+        pagesToProcess: [1, 2, 3],
+        viewportScale: 1.3
       });
 
       for (const page of pngPages) {

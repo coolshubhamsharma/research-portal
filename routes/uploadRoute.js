@@ -2,7 +2,8 @@ const express = require("express");
 const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
-const pdf = require("pdf-poppler");
+const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
+const { createCanvas } = require("canvas");
 
 const { analyzeImages } = require("../services/analysisService");
 
@@ -20,40 +21,32 @@ router.post("/upload", upload.single("document"), async (req, res) => {
     }
 
     const filePath = path.resolve(req.file.path);
-    const outputDir = path.join(__dirname, "../uploads/images");
+    const fileBuffer = fs.readFileSync(filePath);
 
-    if (!fs.existsSync(outputDir)) {
-      fs.mkdirSync(outputDir, { recursive: true });
+    const pdf = await pdfjsLib.getDocument({ data: fileBuffer }).promise;
+
+    const maxPages = Math.min(pdf.numPages, 6);
+    const base64Images = [];
+
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 1.5 });
+
+      const canvas = createCanvas(viewport.width, viewport.height);
+      const context = canvas.getContext("2d");
+
+      await page.render({
+        canvasContext: context,
+        viewport: viewport
+      }).promise;
+
+      const imageBuffer = canvas.toBuffer("image/png");
+      base64Images.push(imageBuffer.toString("base64"));
     }
-
-    const options = {
-      format: "png",
-      out_dir: outputDir,
-      out_prefix: "page",
-      page: null // convert all pages
-    };
-
-    await pdf.convert(filePath, options);
-
-    // Only take first 6 pages to avoid token overload
-    const imageFiles = fs.readdirSync(outputDir)
-      .filter(file => file.endsWith(".png"))
-      .sort()
-      .slice(0, 6);
-
-    const base64Images = imageFiles.map(file => {
-      const imgPath = path.join(outputDir, file);
-      const imgBuffer = fs.readFileSync(imgPath);
-      return imgBuffer.toString("base64");
-    });
 
     const result = await analyzeImages(base64Images);
 
-    // Cleanup
     fs.unlinkSync(filePath);
-    imageFiles.forEach(file => {
-      fs.unlinkSync(path.join(outputDir, file));
-    });
 
     res.json(result);
 
